@@ -23,7 +23,7 @@ def generate_launch_description():
     
     goals_file_arg = DeclareLaunchArgument(
         'goals_file',
-        default_value='goal_poses',
+        default_value='goal_poses.yaml',
         description='Used to provide goal poses for cube 2 and final destination'
     )
     
@@ -153,35 +153,35 @@ def generate_launch_description():
     #     ]
     # )
     
-    # # 5. Nav2 Navigation Stack
-    # navigation_launch = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource([
-    #         PathJoinSubstitution([
-    #             FindPackageShare('nav2_bringup'),
-    #             'launch',
-    #             'navigation_launch.py'
-    #         ])
-    #     ]),
-    #     launch_arguments={
-    #         'use_sim_time': LaunchConfiguration('use_sim_time'),
-    #         'autostart': 'true',
-    #         'params_file': nav2_file_path,
-    #     }.items(),
-    # )
+    # 5. Nav2 Navigation Stack
+    navigation_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('nav2_bringup'),
+                'launch',
+                'navigation_launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'autostart': 'true',
+            'params_file': nav2_file_path,
+        }.items(),
+    )
     
-    # # 6. RViz with navigation configuration
-    # rviz_config_path = PathJoinSubstitution(
-    #     [FindPackageShare("nav2_bringup"), "rviz", "nav2_default_view.rviz"]
-    # )
+    # 6. RViz with navigation configuration
+    rviz_config_path = PathJoinSubstitution(
+        [FindPackageShare("nav2_bringup"), "rviz", "nav2_default_view.rviz"]
+    )
     
-    # rviz_node = Node(
-    #     package='rviz2',
-    #     executable='rviz2',
-    #     name='rviz2',
-    #     arguments=['-d', rviz_config_path],
-    #     parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
-    #     output='screen'
-    # )
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config_path],
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
+        output='screen'
+    )
     
 
     # Add the launch arguments first
@@ -201,7 +201,7 @@ def generate_launch_description():
     ld.add_action(navigation_node)
     # ld.add_action(lifecycle_manager_node)
     
-    # ld.add_action(navigation_launch)
-    # ld.add_action(rviz_node)
+    ld.add_action(navigation_launch)
+    ld.add_action(rviz_node)
     
     return ld

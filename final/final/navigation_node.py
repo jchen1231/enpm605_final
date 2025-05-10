@@ -5,8 +5,8 @@ from ros2_aruco_interfaces.msg import ArucoMarkers
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.duration import Duration
-from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.parameter import Parameter
+# from rclpy.callback_groups import ReentrantCallbackGroup
+# from rclpy.parameter import Parameter
 from rcl_interfaces.msg import ParameterDescriptor
 import tf_transformations
 import numpy as np
@@ -31,6 +31,13 @@ class NavigationNode(Node):
                 ),
             ],
         )
+        # Defaults the use
+        try:
+            self.declare_parameter("use_sim_time", True)
+        except Exception:
+            self.get_logger().info("Using the passed 'use_sim_time' parameter value")
+            pass
+        
         # Getting and setting parameters
         self._goals_file = self.get_parameter("goals_file").value
         
@@ -68,6 +75,10 @@ class NavigationNode(Node):
         self._tf_broadcaster = TransformBroadcaster(self)
         self._tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
+        
+        pose_stamped = self._create_pose_stamped(-8.0, 8.0, 0.25, 1.57, self._world_frame)
+        transform_stamped = self._create_transform_stamped(pose_stamped, self._camera_frame)
+        self._static_tf_broadcaster.sendTransform(transform_stamped)
         
         # self._static_tf_broadcaster.sendTransform(self._create_transform_stamped(pose_stamped, "odom"))
         
@@ -342,7 +353,6 @@ class NavigationNode(Node):
         return transform_stamped
 
 def main(args=None):
-    node = None
     rclpy.init(args=args)
     try:
         node = NavigationNode()
@@ -352,6 +362,5 @@ def main(args=None):
     except Exception as e:
         print(f"Unhandled exception: {e}")
     finally:    
-        if node is not None:
-            node.destroy_node()
+        node.destroy_node()
         rclpy.shutdown()
