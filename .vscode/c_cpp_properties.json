@@ -1,0 +1,28 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/jchen777/605final_ws/install/ros2_aruco_interfaces/include/**",
+        "/home/jchen777/605final_ws/install/mecanum_drive_controller/include/**",
+        "/home/jchen777/605final_ws/install/imu_sensor_broadcaster/include/**",
+        "/home/jchen777/ros605_ws/install/rosbot_interfaces/include/**",
+        "/home/jchen777/ros605_ws/install/mecanum_drive_controller/include/**",
+        "/home/jchen777/ros605_ws/install/imu_sensor_broadcaster/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/jchen777/605final_ws/src/enpm605_ros_spring2025_final/rosbot_ros_demo/husarion_controllers/mecanum_drive_controller/include/**",
+        "/home/jchen777/605final_ws/src/enpm605_ros_spring2025_final/rosbot_ros_demo/imu_sensor_broadcaster/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
