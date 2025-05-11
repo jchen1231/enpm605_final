@@ -194,8 +194,8 @@ class NavigationNode(Node):
         try:
             # Broadcast the camera frame
             pose_stamped = self._create_pose_stamped(
-                self._camera_pose[0] - self._startx, 
-                self._camera_pose[1] - self._starty,
+                self._camera_pose[0] - 0.0, 
+                self._camera_pose[1] - 2.0,
                 self._camera_pose[2], 
                 self._camera_pose[5], 
                 self._world_frame
@@ -307,8 +307,8 @@ class NavigationNode(Node):
         # Set the initial pose of the robot
         self._initial_pose.header.frame_id = self._world_frame
         self._initial_pose.header.stamp = self.get_clock().now().to_msg()
-        self._initial_pose.pose.position.x = 0.0
-        self._initial_pose.pose.position.y = 0.0
+        self._initial_pose.pose.position.x = self._startx - 0.0
+        self._initial_pose.pose.position.y = self._starty - 2.0
         self._initial_pose.pose.position.z = 0.0
         self._initial_pose.pose.orientation.x = 0.0
         self._initial_pose.pose.orientation.y = 0.0
