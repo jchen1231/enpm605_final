@@ -76,6 +76,16 @@ def generate_launch_description():
         output='screen'
     )
 
+    # bridge_camera_pose = Node(
+    #     package='ros_gz_bridge',
+    #     executable='parameter_bridge',
+    #     name='camera_pose_bridge',
+    #     arguments=[
+    #         '/world/husarion_world/pose/info@geometry_msgs/msg/PoseStamped@gz.msgs.Pose_V'
+    #     ],
+    #     output='screen'
+    # )
+
     aruco_detector_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -139,6 +149,7 @@ def generate_launch_description():
             *spawn_group,
             bridge_camera,        # Added camera bridge
             bridge_camera_info,   # Added camera info bridge
+            # bridge_camera_pose,
             aruco_detector_launch
         ]
     )

@@ -13,6 +13,7 @@ import numpy as np
 import yaml
 import os
 from ament_index_python.packages import get_package_share_directory
+# import gz.transport
 
 
 class NavigationNode(Node):
@@ -29,6 +30,21 @@ class NavigationNode(Node):
                     "goal_poses.yaml",
                     ParameterDescriptor(description="File containing goals"),
                 ),
+                (
+                    "camera_pose",
+                    [-8.0, 7.0, 0.25, 0.0, 0.0, 1.57],
+                    ParameterDescriptor(description="Pose of camera pointing to cube #1"),
+                ),
+                (
+                    'x',
+                    0.0,
+                    ParameterDescriptor(description="Where robot starts x, for localization")
+                ),
+                (
+                    'y',
+                    2.0,
+                    ParameterDescriptor(description="Where robot starts y, for localization")
+                ),
             ],
         )
         # Defaults the use
@@ -40,6 +56,10 @@ class NavigationNode(Node):
         
         # Getting and setting parameters
         self._goals_file = self.get_parameter("goals_file").value
+        self._camera_pose = self.get_parameter("camera_pose").value
+        self._startx = self.get_parameter('x').value
+        self._starty = self.get_parameter('y').value
+        
         
         # Load predefined goals
         self._cube2_goals = dict()
@@ -47,27 +67,33 @@ class NavigationNode(Node):
         self._load_goals()
         
         # Declare other attributes
+        self._ARUCO_BOX_SIZE = 0.5
         self._initial_pose = PoseStamped()
         self._aruco_frame = "cube1_aruco"
         self._world_frame = "map"
-        self._camera_frame = "camera/camera_link/camera"
+        self._camera_frame = "static_camera"
         self._detected_cube2_id = None
         self._detected_cube2_position = list()
         self._detected_cube2_orientation = list()
         self._detected_final_id = None
         self._detected_final_position = list()
         self._detected_final_orientation = list()
+        # # Extract the required values for cube 2 goal from parameters
+        # detected_cube2_id = msg.marker_ids[0]
+        # detected_cube2_position = self._cube2_goals[detected_cube2_id]["position"]
+        # detected_cube2_orientation = self._cube2_goals[detected_cube2_id]["orientation"]
+            
         
         # Navigator
         self._navigator = BasicNavigator()
         
         # Declare flags
         self._statics_broadcasted = False
-        self._cube2_detected = False
+        self._phase1_complete = False
         
         # Create subscribers
         self._aruco_marker_sub1 = self.create_subscription(ArucoMarkers, "/aruco_markers", self._aruco_marker_sub_cb1, 3)
-        # self._aruco_marker_sub2 = self.create_subscription(ArucoMarkers, "/rosbot/aruco_markers",3, self._aruco_marker_sub_cb2)
+        # self._aruco_marker_sub2 = self.create_subscription(ArucoMarkers, "/aruco_markers", self._aruco_marker_sub_cb2, 3)
         
 
         # TF system setup
@@ -76,13 +102,6 @@ class NavigationNode(Node):
         self._tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
         
-        pose_stamped = self._create_pose_stamped(-8.0, 8.0, 0.25, 1.57, self._world_frame)
-        transform_stamped = self._create_transform_stamped(pose_stamped, self._camera_frame)
-        self._static_tf_broadcaster.sendTransform(transform_stamped)
-        
-        # self._static_tf_broadcaster.sendTransform(self._create_transform_stamped(pose_stamped, "odom"))
-        
-        self.get_logger().info(f"Successfully broadcasted the static frame {self._camera_frame}.")
         
         # Create timer to periodically check transforms
         # self._listener_timer = self.create_timer(1.0, self._check_transform)
@@ -165,47 +184,54 @@ class NavigationNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error loading goals file: {e}")
             # Return empty dict - service will return failure
-            return {}    
-        
+            return {}         
+
         
     def _aruco_marker_sub_cb1(self, msg: ArucoMarkers) -> None:
         if self._statics_broadcasted is True:
             return
+        
         try:
-            
-            # Extract the required values for cube 2 goal from parameters
-            frame_id = msg.header.frame_id
-            detected_cube2_id = msg.marker_ids[0]
-            detected_cube2_position = self._cube2_goals[detected_cube2_id]["position"]
-            detected_cube2_orientation = self._cube2_goals[detected_cube2_id]["orientation"]
-            
-            # Broadcast the aruco marker frame
-            transform_stamped = self._create_transform_stamped(
-                self._create_pose_stamped(
-                    *detected_cube2_position, 
-                    0.0, 
-                    detected_cube2_orientation[2],
-                    frame_id
-                    ),
-                self._aruco_frame
+            # Broadcast the camera frame
+            pose_stamped = self._create_pose_stamped(
+                self._camera_pose[0] - self._startx, 
+                self._camera_pose[1] - self._starty,
+                self._camera_pose[2], 
+                self._camera_pose[5], 
+                self._world_frame
             )
-            self.get_logger().error(f"{transform_stamped}")
-            
-            # Broadcast the transform
+            transform_stamped = self._create_transform_stamped(pose_stamped, self._camera_frame)
             self._static_tf_broadcaster.sendTransform(transform_stamped)
+            self.get_logger().info(f"Successfully broadcasted frame {self._camera_frame}.")
+                
+        except Exception as e:
+            self.get_logger().error(f"Failed to broadcast tf {self._camera_frame}: {str(e)}")
+            
+        try:
+            # Create aruco marker stamped transform
+            aruco_pose_stamped = PoseStamped()
+            aruco_pose_stamped.header.frame_id = self._camera_frame
+            aruco_pose_stamped.header.stamp = self.get_clock().now().to_msg()
+            aruco_pose_stamped.pose = msg.poses[0]
+            temp = msg.poses[0].position.x
+            aruco_pose_stamped.pose.position.x = msg.poses[0].position.z
+            aruco_pose_stamped.pose.position.z = temp
+            aruco_transform_stamped = self._create_transform_stamped(
+                aruco_pose_stamped,
+                self._aruco_frame,
+            )
+            
+            # Broadcast the transform of aruco marker for cube #1
+            self._static_tf_broadcaster.sendTransform(aruco_transform_stamped)
+            self.get_logger().info(f"Successfully broadcasted frame {self._aruco_frame}.")
             
             # Update flag
             self._statics_broadcasted = True
             
-            # Log
-            # self.get_logger().info("Successfully broadcasted transform for cube #1.")
-            
         except Exception as e:
-            self.get_logger().error(f"Failed to broadcast tf: {str(e)}")
-            # Try again after a delay by creating a new timer        
+            self.get_logger().error(f"Failed to broadcast tf {self._aruco_frame}: {str(e)}")   
         
 
-        
     # def _aruco_marker1_sub_cb2(self, msg: ArucoMarkers) -> None:
     #     goal_index = self._final_goal_ids.index(msg.marker_ids)
     #     # Extract the required values from parameters
@@ -217,10 +243,7 @@ class NavigationNode(Node):
     def _initialize_navigation_cb(self) -> None:
         if self._statics_broadcasted is False:
             return
-
-        # No longer need this subscriber
-        # self._aruco_marker_sub1.destroy()
-
+        
         # Cancel the timer so this only runs once
         self._init_timer.cancel()
         
@@ -230,8 +253,12 @@ class NavigationNode(Node):
             
             x, y = self._lookup_tf(self._world_frame, self._aruco_frame)
             
-            # Go to a goal
-            self._navigate(x, y)
+            # Go to a set distance opposing the static_camera
+            x += np.cos(self._camera_pose[5]) * (self._ARUCO_BOX_SIZE)
+            y += np.sin(self._camera_pose[5]) * (self._ARUCO_BOX_SIZE)
+            # Rotate 180 from the yaw of statoc_camera
+            yaw = self._camera_pose[5] - 3.14
+            self._navigate(x, y, yaw)
             
             # Follow the waypoints
             # self.follow_waypoints()
@@ -249,7 +276,7 @@ class NavigationNode(Node):
                 parent_frame,
                 child_frame,
                 rclpy.time.Time(),
-                rclpy.duration.Duration(seconds=1),
+                rclpy.duration.Duration(seconds=0.1),
             )
 
             # Process the transform data
@@ -257,13 +284,10 @@ class NavigationNode(Node):
             ty = transform.transform.translation.y
             tz = transform.transform.translation.z
 
-            # Calculate distance from origin of base frame to marker
-            distance = np.sqrt(tx * tx + ty * ty + tz * tz)
-
             # Log the information
             self.get_logger().info(
-                f"Cube with frame {child_frame} is at position [{tx:.3f}, {ty:.3f}, {tz:.3f}] "
-                f"relative to {parent_frame} (distance: {distance:.3f}m)"
+                f"Frame {child_frame} is at position [{tx:.3f}, {ty:.3f}, {tz:.3f}] "
+                f"relative to {parent_frame}"
             )
 
             return (tx, ty)
@@ -282,7 +306,7 @@ class NavigationNode(Node):
         """
         # Set the initial pose of the robot
         self._initial_pose.header.frame_id = self._world_frame
-        self._initial_pose.header.stamp = self._navigator.get_clock().now().to_msg()
+        self._initial_pose.header.stamp = self.get_clock().now().to_msg()
         self._initial_pose.pose.position.x = 0.0
         self._initial_pose.pose.position.y = 0.0
         self._initial_pose.pose.position.z = 0.0
@@ -293,16 +317,16 @@ class NavigationNode(Node):
         self._navigator.setInitialPose(self._initial_pose)
         self.get_logger().info("Initial robot pose is set.")
 
-    def _navigate(self, x: float, y: float):
+    def _navigate(self, x: float, y: float, yaw: float) -> None:
         """
         Navigate the robot to the goal (x, y).
         """
         # Wait until Nav2 is active
-        self._navigator.waitUntilNav2Active() 
+        self._navigator.waitUntilNav2Active()
         
-        goal = self._create_pose_stamped(x, y, 0.0, 0.0, self._world_frame)
-        
+        goal = self._create_pose_stamped(x, y, 0.0, yaw, self._world_frame)
         self._navigator.goToPose(goal)
+        self.get_logger().info(f"Attempting to navigate to ({x}, {y})")
         while not self._navigator.isTaskComplete():
             feedback = self._navigator.getFeedback()
             self.get_logger().info(f"Feedback: {feedback}")
@@ -343,7 +367,7 @@ class NavigationNode(Node):
         transform_stamped.header.stamp = ps.header.stamp
         transform_stamped.child_frame_id = child_frame
         transform_stamped.transform.translation.x = ps.pose.position.x
-        transform_stamped.transform.translation.y = ps.pose.position.y
+        transform_stamped.transform.translation.y = ps.pose.position.y 
         transform_stamped.transform.translation.z = ps.pose.position.z
         transform_stamped.transform.rotation.x = ps.pose.orientation.x
         transform_stamped.transform.rotation.y = ps.pose.orientation.y

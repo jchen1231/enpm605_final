@@ -4,7 +4,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     LogInfo
 )
-# from launch.conditions import IfCondition
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -50,9 +50,12 @@ def generate_launch_description():
     )
 
     # Parameter files
-    nav2_file_path = PathJoinSubstitution(
+    nav2_params_path = PathJoinSubstitution(
         [FindPackageShare("final"), "config", "nav2_params.yaml"]
     )
+
+    start_x_arg = DeclareLaunchArgument('x', default_value='0.0')
+    start_y_arg = DeclareLaunchArgument('y', default_value='2.0')
 
     # 1. ROSbot Gazebo simulation launch
     rosbot_gazebo_launch = IncludeLaunchDescription(
@@ -64,10 +67,12 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            'namespace':'',
-            # 'use_sim_time': LaunchConfiguration('use_sim_time')
+            'start_rviz': 'false',
+            'x': LaunchConfiguration('x'),
+            'y': LaunchConfiguration('y'),
+            'use_sim_time': LaunchConfiguration('use_sim_time')
         }.items(),
-        # condition=IfCondition(LaunchConfiguration("enable_rosbot_gazebo")),
+        condition=IfCondition(LaunchConfiguration("enable_rosbot_gazebo")),
     )
 
     # # 2. Standalone Map Server (for better debugging)
@@ -94,50 +99,21 @@ def generate_launch_description():
         arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
     )
     
-    # 3. AMCL for localization
-    amcl_node = Node(
-        package='nav2_amcl',
-        executable='amcl',
-        name='amcl',
-        output='screen',
-        parameters=[
-            {'use_sim_time': LaunchConfiguration('use_sim_time')},
-            # Add some basic AMCL parameters - these should be in your nav2_params.yaml normally
-            {'alpha1': 0.2},
-            {'alpha2': 0.2},
-            {'alpha3': 0.2},
-            {'alpha4': 0.2},
-            {'alpha5': 0.2},
-            {'base_frame_id': 'base_link'},
-            {'beam_skip_distance': 0.5},
-            {'beam_skip_threshold': 0.3},
-            {'do_beamskip': False},
-            {'global_frame_id': 'map'},
-            {'lambda_short': 0.1},
-            {'max_beams': 60},
-            {'max_particles': 2000},
-            {'min_particles': 500},
-            {'odom_frame_id': 'odom'},
-            {'scan_topic': 'scan_filtered'},
-            {'transform_tolerance': 1.0},
-            {'update_min_d': 0.2},
-            {'update_min_a': 0.2},
-            {'z_hit': 0.5},
-            {'z_max': 0.05},
-            {'z_rand': 0.5},
-            {'z_short': 0.05}
-        ]
-    )
-    
-    navigation_node = Node(
-        package='final',
-        executable='navigation_node',
-        name='navigation_node',
-        output='screen',
-        parameters=[
-            {'goals_file': LaunchConfiguration('goals_file')},
-            {'use_sim_time': LaunchConfiguration('use_sim_time')}
-        ]
+    # 3. Nav2 Localization - use the standard Nav2 localization launch instead of individual nodes
+    localization_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('nav2_bringup'),
+                'launch',
+                'localization_launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'map': LaunchConfiguration('map'),
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'params_file': nav2_params_path,
+            'autostart': 'true'
+        }.items(),
     )
     
     # # 4. Lifecycle manager for map_server and amcl
@@ -165,7 +141,7 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'autostart': 'true',
-            'params_file': nav2_file_path,
+            'params_file': nav2_params_path,
         }.items(),
     )
     
@@ -183,6 +159,20 @@ def generate_launch_description():
         output='screen'
     )
     
+    
+    navigation_node = Node(
+        package='final',
+        executable='navigation_node',
+        name='navigation_node',
+        output='screen',
+        parameters=[
+            {'goals_file': LaunchConfiguration('goals_file')},
+            {'camera_pose': [-8.0, 7.0, 0.25, 0.0, 0.0, 1.57]},
+            {'use_sim_time': LaunchConfiguration('use_sim_time')},
+            {'x': LaunchConfiguration('x')},
+            {'y': LaunchConfiguration('y')}
+        ]
+    )
 
     # Add the launch arguments first
     ld.add_action(use_sim_time_arg)
@@ -190,6 +180,8 @@ def generate_launch_description():
     ld.add_action(enable_rosbot_gazebo_arg)
     ld.add_action(map_file_arg)
     ld.add_action(log_map_path)
+    ld.add_action(start_x_arg)
+    ld.add_action(start_y_arg)
     
     # Add actions in the correct order
     ld.add_action(rosbot_gazebo_launch)
@@ -197,11 +189,12 @@ def generate_launch_description():
     # Debug map server components individually instead of using localization_launch
     # ld.add_action(map_server_node)
     ld.add_action(static_tf_node)
-    ld.add_action(amcl_node)
-    ld.add_action(navigation_node)
+    ld.add_action(localization_launch)
     # ld.add_action(lifecycle_manager_node)
     
     ld.add_action(navigation_launch)
     ld.add_action(rviz_node)
+    
+    ld.add_action(navigation_node)
     
     return ld

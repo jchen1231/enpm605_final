@@ -1,7 +1,7 @@
 image: final_husarion_world.pgm
 mode: trinary
-resolution: 0.05
-origin: [-11.6, -14, 0]
+resolution: 0.05 # meters/pixel?
+origin: [-11.6, -14, 0] # x, y, and yaw of the map's bottom-left pixel
 negate: 0
 occupied_thresh: 0.65
 free_thresh: 0.25

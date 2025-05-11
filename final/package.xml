@@ -12,6 +12,7 @@
   <depend>ros2_aruco_interfaces</depend>  
   <depend>nav2_simple_commander</depend>
   <depend>nav2_amcl</depend>
+  <exec_depend>nav2_bringup</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
