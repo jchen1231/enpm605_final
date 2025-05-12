@@ -28,7 +28,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'navigation_node = final.navigation_node:main'
+            'navigation_node = final.navigation_node:main',
+            'get_goal = final.get_goal:main'
         ],
     },
 )

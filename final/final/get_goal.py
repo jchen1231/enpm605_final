@@ -9,7 +9,7 @@ import time
 
 class GoalProviderService(Node):
     def __init__(self):
-        super().__init__("get_goal_service_demo")
+        super().__init__("get_goal")
 
         # Parameters
         self.declare_parameter("goals_file", "goals.yaml")

@@ -32,7 +32,7 @@ class NavigationNode(Node):
                 ),
                 (
                     "camera_pose",
-                    [-8.0, 7.0, 0.25, 0.0, 0.0, 1.57],
+                    [-8.0, 7.0, 0.25, 0.0, 0.0, 1.57], # [x, y, z, roll, pitch, yaw]
                     ParameterDescriptor(description="Pose of camera pointing to cube #1"),
                 ),
                 (

@@ -188,6 +188,18 @@ def generate_launch_description():
         executable='aruco_node',
         parameters=[aruco_params_path],
     )
+    
+    get_goals_path = os.path.join(
+        get_package_share_directory('final'),
+        'config',
+        'aruco_parameters_for_service.yaml'
+    )
+    
+    get_goal_node = Node(
+        package='final',
+        executable='get_goal',
+        parameters=[]
+    )
 
     # Add the launch arguments first
     ld.add_action(use_sim_time_arg)
