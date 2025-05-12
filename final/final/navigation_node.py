@@ -67,7 +67,11 @@ class NavigationNode(Node):
         self._load_goals()
         
         # Declare other attributes
-        self._ARUCO_BOX_SIZE = 0.5
+        self._MAP_OFFSET_X = 0.0
+        self._MAP_OFFSET_Y = 2.0
+        self._CUBE_SIZE = 0.5
+        self._CAMERA_DEPTH_OFFSET = 0.75
+        self._DIST_FROM_CUBE = 1
         self._initial_pose = PoseStamped()
         self._aruco_frame = "cube1_aruco"
         self._world_frame = "map"
@@ -75,33 +79,37 @@ class NavigationNode(Node):
         self._detected_cube2_id = None
         self._detected_cube2_position = list()
         self._detected_cube2_orientation = list()
+        self._detected_cube2_circular_direction = None
         self._detected_final_id = None
         self._detected_final_position = list()
         self._detected_final_orientation = list()
         # # Extract the required values for cube 2 goal from parameters
-        # detected_cube2_id = msg.marker_ids[0]
-        # detected_cube2_position = self._cube2_goals[detected_cube2_id]["position"]
-        # detected_cube2_orientation = self._cube2_goals[detected_cube2_id]["orientation"]
             
-        
         # Navigator
         self._navigator = BasicNavigator()
+        # Set the initial pose of the robot
+        self._localize()
         
         # Declare flags
         self._statics_broadcasted = False
         self._phase1_complete = False
+        self._phase2_complete = False
+        self._phase3_complete = False
         
         # Create subscribers
+        # For the static camera
         self._aruco_marker_sub1 = self.create_subscription(ArucoMarkers, "/aruco_markers", self._aruco_marker_sub_cb1, 3)
-        # self._aruco_marker_sub2 = self.create_subscription(ArucoMarkers, "/aruco_markers", self._aruco_marker_sub_cb2, 3)
+        # For the dynamic camera onbaord Rosbot at cube #1
+        self._aruco_marker_sub2 = self.create_subscription(ArucoMarkers, "/camera/aruco_markers", self._aruco_marker_sub_cb2, 3)
+        # For the dynamic camera onbaord Rosbot at cube #2
+        self._aruco_marker_sub3 = self.create_subscription(ArucoMarkers, "/camera/aruco_markers", self._aruco_marker_sub_cb3, 3)
+        # self.create_timer(5,self._aruco_marker_sub_cb3)
         
-
         # TF system setup
         self._static_tf_broadcaster = StaticTransformBroadcaster(self)
         self._tf_broadcaster = TransformBroadcaster(self)
         self._tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
-        
         
         # Create timer to periodically check transforms
         # self._listener_timer = self.create_timer(1.0, self._check_transform)
@@ -109,7 +117,7 @@ class NavigationNode(Node):
         # Start the BasicNavigator action client
         self._init_timer = self.create_timer(5.0, self._initialize_navigation_cb)
         
-        # Debug log
+        # Log
         self.get_logger().info("Successfully initialized navigation_node.")
         
         
@@ -117,15 +125,12 @@ class NavigationNode(Node):
         """Load goal positions from YAML file"""
         
         self.get_logger().info("Loading goals from file")
-        
-        # Try to find the goals file in various locations
-        goals_path = self.get_parameter("goals_file").value
 
         # If not an absolute path, check in the package share directory
-        if not os.path.isabs(goals_path):
+        if not os.path.isabs(self._goals_file):
             try:
                 package_dir = get_package_share_directory("final")
-                goals_path = os.path.join(package_dir, "config", goals_path)
+                goals_path = os.path.join(package_dir, "config", self._goals_file)
             except Exception as e:
                 self.get_logger().warn(f"Failed to locate package directory: {e}")
 
@@ -134,26 +139,8 @@ class NavigationNode(Node):
             self.get_logger().warn(
                 f"Goals file not found at {goals_path}, using default values"
             )
-            # # Default goals if file not found
-            # goals = {
-            #     "2": {
-            #         "position": {"x": 1.0, "y": 0.0, "z": 0.0},
-            #         "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            #     },
-            #     "4": {
-            #         "position": {"x": 0.0, "y": 1.0, "z": 0.0},
-            #         "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            #     },
-            #     "5": {
-            #         "position": {"x": -1.0, "y": 0.0, "z": 0.0},
-            #         "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            #     },
-            #     "6": {
-            #         "position": {"x": 4.0, "y": -2.0, "z": 0.0},
-            #         "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            #     },
-            # }
-            # return goals
+            # Default goals if file not found
+
             return {}
 
         # Try to load the file
@@ -162,22 +149,21 @@ class NavigationNode(Node):
                 goals = yaml.safe_load(file)
                 if not goals:
                     raise ValueError("Empty or invalid YAML file")
-
                 
-                cube2_g = goals["cube2_goal"]
-                final_g = goals["final_goal"]
+                self._cube2_goals = goals["cube2_goal"]
+                self._final_goals = goals["final_goal"]
                 self.get_logger().info(f"Loaded cube 2 goals from {goals_path}")
-                for goal in cube2_g:
+                
+                for key, value in self._cube2_goals.items():
                     self.get_logger().info(
-                        f"ArUco ID:{goal['id']} -- (x: {goal['position'][0]}, {goal['position'][1]})"
+                        f"ArUco ID:{key} -- (x: {value['position'][0]}, {value['position'][1]})"
                     )
-                    self._cube2_goals[goal['id']] = goal
                 self.get_logger().info(f"Loaded final goals from {goals_path}")
-                for goal in final_g:
+                
+                for key, value in self._final_goals.items():
                     self.get_logger().info(
-                        f"ArUco ID:{goal['id']} -- (x: {goal['position'][0]}, {goal['position'][1]})"
+                        f"ArUco ID:{key} -- (x: {value['position'][0]}, {value['position'][1]})"
                     )
-                    self._final_goals[goal['id']] = goal
                     
                 self.get_logger().info("All goals loaded successfully")
 
@@ -194,8 +180,8 @@ class NavigationNode(Node):
         try:
             # Broadcast the camera frame
             pose_stamped = self._create_pose_stamped(
-                self._camera_pose[0] - 0.0, 
-                self._camera_pose[1] - 2.0,
+                self._camera_pose[0] - self._MAP_OFFSET_X, 
+                self._camera_pose[1] - self._MAP_OFFSET_Y,
                 self._camera_pose[2], 
                 self._camera_pose[5], 
                 self._world_frame
@@ -214,7 +200,7 @@ class NavigationNode(Node):
             aruco_pose_stamped.header.stamp = self.get_clock().now().to_msg()
             aruco_pose_stamped.pose = msg.poses[0]
             temp = msg.poses[0].position.x
-            aruco_pose_stamped.pose.position.x = msg.poses[0].position.z
+            aruco_pose_stamped.pose.position.x = msg.poses[0].position.z - self._CAMERA_DEPTH_OFFSET
             aruco_pose_stamped.pose.position.z = temp
             aruco_transform_stamped = self._create_transform_stamped(
                 aruco_pose_stamped,
@@ -232,30 +218,124 @@ class NavigationNode(Node):
             self.get_logger().error(f"Failed to broadcast tf {self._aruco_frame}: {str(e)}")   
         
 
-    # def _aruco_marker1_sub_cb2(self, msg: ArucoMarkers) -> None:
-    #     goal_index = self._final_goal_ids.index(msg.marker_ids)
-    #     # Extract the required values from parameters
-    #     self._detected_final_id = msg.marker_ids
-    #     self._detected_final_position = self._final_goal_positions[goal_index]
-    #     self._detected_final_orientation = self._final_goal_orientations[goal_index]  
+    def _aruco_marker_sub_cb2(self, msg: ArucoMarkers) -> None:
+        if self._phase1_complete is False:
+            return
+        if self._phase2_complete is True:
+            return
         
+        self._detected_cube2_id = msg.marker_ids[0]
+        self._detected_cube2_position = self._cube2_goals[self._detected_cube2_id]['position']
+        # self.get_logger().info(f'position {self._detected_cube2_position}')
+        self._detected_cube2_orientation = self._cube2_goals[self._detected_cube2_id]['orientation']
+        self._detected_cube2_circular_direction = self._cube2_goals[self._detected_cube2_id]['circular_direction']
+        self.get_logger().info(f"Detected an aruco marker at cube #1 with the ID: {self._detected_cube2_id}.")
+        
+        try:
+            self._navigate(
+                self._detected_cube2_position[0] - self._MAP_OFFSET_X,
+                self._detected_cube2_position[1] - self._MAP_OFFSET_Y,
+                self._detected_cube2_orientation[2],
+                )
+            
+            # Follow the waypoints
+            # self.follow_waypoints()
+            
+            self.get_logger().info("Navigated to cube #2 successfully")
+            
+            # Update flag
+            self._phase2_complete = True
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to navigate to cube #2: {str(e)}")
+        
+        
+    def _aruco_marker_sub_cb3(self, msg) -> None:
+        if self._phase2_complete is False:
+            return
+        if self._phase3_complete is True:
+            return
+        # self._localize()
+        # Grabbed final coordinates, but need to circle around the aruco box first
+        self._detected_final_id = msg.marker_ids[0]
+        self._detected_final_position = self._final_goals[self._detected_final_id]['position']
+        self._detected_final_orientation = self._final_goals[self._detected_final_id]['orientation']
+        self.get_logger().info(f"Detected an aruco marker at cube #2 with the ID: {self._detected_final_id}.")
+        
+        try:
+            # Make path using current Rosbot pose and pose of cube (which the robot faces)
+            rosbot_x = self._detected_cube2_position[0]
+            rosbot_y = self._detected_cube2_position[1]
+            rosbot_yaw = self._detected_cube2_orientation[2]
+            # direction is positive and CCW if 1, direction is negative and CW if 0
+            direction = (self._detected_cube2_circular_direction)*2 - 1
+            
+            # rosbot_x = 3.75
+            # rosbot_y = -5.25
+            # rosbot_yaw = -1.57
+            # direction = -1
+            
+            radius = (self._CUBE_SIZE/2 + self._DIST_FROM_CUBE)
+            cube_x = rosbot_x + radius * np.cos(rosbot_yaw)
+            cube_y = rosbot_y + radius * np.sin(rosbot_yaw)
+            
+            slices = 60
+            step_size = np.pi*2/slices*direction
+            wp_arr = list()
+            
+            for i in range(slices):
+                x = radius * np.cos(-rosbot_yaw + i * step_size) + cube_x - self._MAP_OFFSET_X
+                y = radius * np.sin(-rosbot_yaw + i * step_size) + cube_y - self._MAP_OFFSET_Y
+                wp_arr.append([x, y])
+            
+            # Compute yaw between every two points of traveling along the circle
+            final_wp_arr = list()
+            for i in range(len(wp_arr)-1):
+                x0, y0 = wp_arr[i]
+                x, y = wp_arr[i + 1]
+                yaw = np.arctan2(y-y0, x-x0)
+                final_wp_arr.append([x, y, 0.0, yaw])
+            
+            # Follow the waypoints
+            self._follow_waypoints(final_wp_arr)
+            
+            self.get_logger().info("Circled around cube #2 successfully")
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to circle around cube #2: {str(e)}")
+    
+        try:
+            # Now navigate to final destination
+            self._navigate(
+                self._detected_final_position[0] - self._MAP_OFFSET_X,
+                self._detected_final_position[1] - self._MAP_OFFSET_Y,
+                self._detected_final_orientation[2],
+                )
+            
+            self.get_logger().info("Navigated to final destination successfully")
+            
+            # Update flag
+            self._phase3_complete = True
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to navigate to cube final destination: {str(e)}")
+    
     
     def _initialize_navigation_cb(self) -> None:
         if self._statics_broadcasted is False:
+            return
+        if self._phase1_complete is True:
             return
         
         # Cancel the timer so this only runs once
         self._init_timer.cancel()
         
         try: 
-            # Set the initial pose of the robot
-            self._localize()
-            
             x, y = self._lookup_tf(self._world_frame, self._aruco_frame)
             
             # Go to a set distance opposing the static_camera
-            x += np.cos(self._camera_pose[5]) * (self._ARUCO_BOX_SIZE)
-            y += np.sin(self._camera_pose[5]) * (self._ARUCO_BOX_SIZE)
+            x += np.cos(self._camera_pose[5]) * (self._CUBE_SIZE + self._DIST_FROM_CUBE)
+            y += np.sin(self._camera_pose[5]) * (self._CUBE_SIZE + self._DIST_FROM_CUBE)
             # Rotate 180 from the yaw of statoc_camera
             yaw = self._camera_pose[5] - 3.14
             self._navigate(x, y, yaw)
@@ -263,7 +343,11 @@ class NavigationNode(Node):
             # Follow the waypoints
             # self.follow_waypoints()
             
-            self.get_logger().info("Navigation initialized successfully")
+            self.get_logger().info("Navigated to cube #1 successfully")
+            
+            # Update flag
+            self._phase1_complete = True
+            
         except Exception as e:
             self.get_logger().error(f"Failed to initialize navigation: {str(e)}")
             # Try again after a delay by creating a new timer
@@ -307,8 +391,8 @@ class NavigationNode(Node):
         # Set the initial pose of the robot
         self._initial_pose.header.frame_id = self._world_frame
         self._initial_pose.header.stamp = self.get_clock().now().to_msg()
-        self._initial_pose.pose.position.x = self._startx - 0.0
-        self._initial_pose.pose.position.y = self._starty - 2.0
+        self._initial_pose.pose.position.x = self._startx - self._MAP_OFFSET_X
+        self._initial_pose.pose.position.y = self._starty - self._MAP_OFFSET_Y
         self._initial_pose.pose.position.z = 0.0
         self._initial_pose.pose.orientation.x = 0.0
         self._initial_pose.pose.orientation.y = 0.0
@@ -331,6 +415,27 @@ class NavigationNode(Node):
             feedback = self._navigator.getFeedback()
             self.get_logger().info(f"Feedback: {feedback}")
         
+        result = self._navigator.getResult()
+        if result == TaskResult.SUCCEEDED:
+            self.get_logger().info("Goal succeeded")
+        elif result == TaskResult.CANCELED:
+            self.get_logger().info("Goal was canceled!")
+        elif result == TaskResult.FAILED:
+            self.get_logger().info("Goal failed!")
+
+    def _follow_waypoints(self, wp_arr: list[list[float, float, float, float]]) -> None:
+        # Wait until Nav2 is active
+        self._navigator.waitUntilNav2Active()  
+        waypoints = list()
+        for wp in wp_arr:
+            waypoints.append(self._create_pose_stamped(*wp, self._world_frame))
+
+        self._navigator.followWaypoints(waypoints)
+        
+        while not self._navigator.isTaskComplete():
+            feedback = self._navigator.getFeedback()
+            self.get_logger().info(f"Feedback: {feedback}")
+
         result = self._navigator.getResult()
         if result == TaskResult.SUCCEEDED:
             self.get_logger().info("Goal succeeded")

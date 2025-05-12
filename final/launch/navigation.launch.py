@@ -56,8 +56,8 @@ def generate_launch_description():
         msg=["Map file path: ", LaunchConfiguration("map")]
     )
 
-    start_x_arg = DeclareLaunchArgument('x', default_value='-6.0')
-    start_y_arg = DeclareLaunchArgument('y', default_value='6.0')
+    start_x_arg = DeclareLaunchArgument('x', default_value='0.0')
+    start_y_arg = DeclareLaunchArgument('y', default_value='2.0')
 
     # 1. ROSbot Gazebo simulation launch
     rosbot_gazebo_launch = IncludeLaunchDescription(
@@ -98,7 +98,7 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='static_map_to_odom',
         output='screen',
-        arguments=[LaunchConfiguration('x'), LaunchConfiguration('y'), '0', '0', '0', '0', 'map', 'odom']
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
     )
     
     # 3. Nav2 Localization - use the standard Nav2 localization launch instead of individual nodes
@@ -188,17 +188,6 @@ def generate_launch_description():
         executable='aruco_node',
         parameters=[aruco_params_path],
     )
-    
-    # aruco_detector_launch = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource(
-    #         PathJoinSubstitution(
-    #             [FindPackageShare("final"), "launch", "aruco_recognition2.launch.py"]
-    #         )
-    #     ),
-    #     launch_arguments={
-    #         'namespace': 'camera'
-    #     }.items()
-    # )
 
     # Add the launch arguments first
     ld.add_action(use_sim_time_arg)

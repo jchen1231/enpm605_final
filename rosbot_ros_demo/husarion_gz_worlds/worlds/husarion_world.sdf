@@ -131,7 +131,7 @@
     </model>
     
     <include>
-      <pose>3.75 -6.5 0.25 0 0 0.0</pose>
+      <pose>3.75 -6.5 0.25 0 0 0</pose>
       <name>cube_2</name>
       <uri>model://aruco_box</uri>
     </include>
