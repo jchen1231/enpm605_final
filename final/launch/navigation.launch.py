@@ -168,7 +168,6 @@ def generate_launch_description():
         name='navigation_node',
         output='screen',
         parameters=[
-            {'goals_file': LaunchConfiguration('goals_file')},
             {'camera_pose': [-8.0, 7.0, 0.25, 0.0, 0.0, 1.57]},
             {'use_sim_time': LaunchConfiguration('use_sim_time')},
             {'x': LaunchConfiguration('x')},
@@ -189,16 +188,14 @@ def generate_launch_description():
         parameters=[aruco_params_path],
     )
     
-    get_goals_path = os.path.join(
-        get_package_share_directory('final'),
-        'config',
-        'aruco_parameters_for_service.yaml'
-    )
-    
     get_goal_node = Node(
         package='final',
         executable='get_goal',
-        parameters=[]
+        output='screen',
+        parameters=[
+            {'use_sim_time': LaunchConfiguration('use_sim_time')},
+            {'goals_file': LaunchConfiguration('goals_file')},
+        ]
     )
 
     # Add the launch arguments first
@@ -225,5 +222,6 @@ def generate_launch_description():
     # Newly added nodes
     ld.add_action(navigation_node)
     ld.add_action(aruco_detector)
+    ld.add_action(get_goal_node)
     
     return ld

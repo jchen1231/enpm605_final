@@ -9,7 +9,8 @@
 
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
-  <depend>ros2_aruco_interfaces</depend>  
+  <depend>ros2_aruco_interfaces</depend>
+  <depend>custom_interfaces</depend>
   <depend>nav2_simple_commander</depend>
   <depend>nav2_amcl</depend>
   <exec_depend>nav2_bringup</exec_depend>

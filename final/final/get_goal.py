@@ -1,46 +1,49 @@
 import rclpy
 from rclpy.node import Node
-from rosbot_interfaces.srv import GetGoal
-from geometry_msgs.msg import PoseStamped
+from custom_interfaces.srv import GetGoal
 import yaml
 import os
 from ament_index_python.packages import get_package_share_directory
-import time
+
 
 class GoalProviderService(Node):
     def __init__(self):
         super().__init__("get_goal")
-
+        # Declaring parameters
+        self.declare_parameter("goals_file", "goal_poses.yaml")
+        
         # Parameters
-        self.declare_parameter("goals_file", "goals.yaml")
-        self.declare_parameter("map_frame", "odom")
-
         self._goals_file = self.get_parameter("goals_file").value
-        self._map_frame = self.get_parameter("map_frame").value
 
         # Load predefined goals
-        self._goals = self._load_goals()
+        self._cube2_goals = dict()
+        self._final_goals = dict()
+        self._load_goals()
+        self.get_logger().info("Loaded predefined goals")
 
-        # Create GetGoal service
+        # Create GetGoal service for cube #2
         self._get_goal_srv = self.create_service(
-            GetGoal, "/get_goal", self._handle_get_goal_request
+            GetGoal, "get_cube2_goal", self._get_cube2_goal_request
+        )
+        
+        # Create GetGoal service for final pose
+        self._get_goal_srv = self.create_service(
+            GetGoal, "get_final_goal", self._get_final_goal_request
         )
 
-        self.get_logger().info("get_goal_service_demo node initialized")
-        self.get_logger().info(f"Loaded {len(self._goals)} predefined goals")
-
-    def _load_goals(self):
+        self.get_logger().info("get_goal node initialized")
+        
+       
+    def _load_goals(self) -> None:
         """Load goal positions from YAML file"""
-        goals = {}
-
-        # Try to find the goals file in various locations
-        goals_path = self.get_parameter("goals_file").value
+        
+        self.get_logger().info("Loading goals from file")
 
         # If not an absolute path, check in the package share directory
-        if not os.path.isabs(goals_path):
+        if not os.path.isabs(self._goals_file):
             try:
-                package_dir = get_package_share_directory("rosbot_navigation_demo")
-                goals_path = os.path.join(package_dir, "config", goals_path)
+                package_dir = get_package_share_directory("final")
+                goals_path = os.path.join(package_dir, "config", self._goals_file)
             except Exception as e:
                 self.get_logger().warn(f"Failed to locate package directory: {e}")
 
@@ -50,25 +53,8 @@ class GoalProviderService(Node):
                 f"Goals file not found at {goals_path}, using default values"
             )
             # Default goals if file not found
-            goals = {
-                "0": {
-                    "position": {"x": 1.0, "y": 0.0, "z": 0.0},
-                    "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-                },
-                "1": {
-                    "position": {"x": 0.0, "y": 1.0, "z": 0.0},
-                    "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-                },
-                "2": {
-                    "position": {"x": -1.0, "y": 0.0, "z": 0.0},
-                    "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-                },
-                "3": {
-                    "position": {"x": 4.0, "y": -2.0, "z": 0.0},
-                    "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-                },
-            }
-            return goals
+
+            return
 
         # Try to load the file
         try:
@@ -76,54 +62,72 @@ class GoalProviderService(Node):
                 goals = yaml.safe_load(file)
                 if not goals:
                     raise ValueError("Empty or invalid YAML file")
-
-                self.get_logger().info(f"Loaded goals from {goals_path}")
-                for color, data in goals.items():
+                
+                self._cube2_goals = goals["cube2_goal"]
+                self._final_goals = goals["final_goal"]
+                self.get_logger().info(f"Loaded cube 2 goals from {goals_path}")
+                
+                for key, value in self._cube2_goals.items():
                     self.get_logger().info(
-                        f"  {color}: ({data['position']['x']}, {data['position']['y']})"
+                        f"ArUco ID:{key} -- (x: {value['position'][0]}, {value['position'][1]})"
                     )
-                return goals
+                self.get_logger().info(f"Loaded final goals from {goals_path}")
+                
+                for key, value in self._final_goals.items():
+                    self.get_logger().info(
+                        f"ArUco ID:{key} -- (x: {value['position'][0]}, {value['position'][1]})"
+                    )
+                    
+                self.get_logger().info("All goals loaded successfully")
 
         except Exception as e:
             self.get_logger().error(f"Error loading goals file: {e}")
             # Return empty dict - service will return failure
-            return {}
+            return  
+# 
 
-    def _handle_get_goal_request(self, request, response):
+    def _get_cube2_goal_request(self, request, response):
         """Handle GetGoal service request"""
-        time.sleep(10)
-        color = request.color
 
-        if color in self._goals:
-            goal_data = self._goals[color]
-
-            # Create PoseStamped message
-            pose = PoseStamped()
-            pose.header.stamp = self.get_clock().now().to_msg()
-            pose.header.frame_id = self._map_frame
-
-            # Set position and orientation from stored data
-            pose.pose.position.x = float(goal_data["position"]["x"])
-            pose.pose.position.y = float(goal_data["position"]["y"])
-            pose.pose.position.z = float(goal_data["position"]["z"])
-
-            pose.pose.orientation.x = float(goal_data["orientation"]["x"])
-            pose.pose.orientation.y = float(goal_data["orientation"]["y"])
-            pose.pose.orientation.z = float(goal_data["orientation"]["z"])
-            pose.pose.orientation.w = float(goal_data["orientation"]["w"])
-
-            response.goal_pose = pose
+        if request.id in self._cube2_goals.keys():
+            goal = self._cube2_goals[request.id]
+            
+            response.position = goal['position']
+            response.orientation = goal['orientation']
+            response.circular_direction = goal['circular_direction']
             response.success = True
-            response.message = f"Goal for color '{color}' provided successfully"
+            response.message = f"Goal for ArUco id '{request.id}' provided successfully"
 
             self.get_logger().info(
-                f"Provided goal for {color} at position ({pose.pose.position.x}, {pose.pose.position.y})"
+                f"Provided goal for ArUco id '{request.id}' at position ({response.position[0]}, {response.position[1]})"
             )
         else:
             response.success = False
-            response.message = f"No goal defined for color '{color}'"
+            response.message = f"No goal defined for ArUco id '{request.id}'"
 
-            self.get_logger().warn(f"No goal defined for color {color}")
+            self.get_logger().warn(f"No goal defined for ArUco id '{request.id}'")
+
+        return response
+    
+
+    def _get_final_goal_request(self, request, response):
+        if request.id in self._final_goals.keys():
+            goal = self._final_goals[request.id]
+            
+            response.position = goal['position']
+            response.orientation= goal['orientation']
+            response.circular_direction = 0 # UNUSED, DOES NOT MATTER
+            response.success = True
+            response.message = f"Goal for ArUco id '{request.id}' provided successfully"
+
+            self.get_logger().info(
+                f"Provided goal for ArUco id '{request.id}'  at position ({response.position[0]}, {response.position[1]})"
+            )
+        else:
+            response.success = False
+            response.message = f"No goal defined for ArUco id '{request.id}'"
+
+            self.get_logger().warn(f"No goal defined for ArUco id '{request.id}'")
 
         return response
 
