@@ -19,7 +19,14 @@ setup(
         # Include map files
         (os.path.join('share', package_name, 'maps'), glob('maps/*')),
     ],
-    install_requires=['setuptools'],
+    install_requires=[
+        'setuptools',
+        'opencv-contrib-python',
+        'transforms3d',
+        'PyYAML',
+        'tf-transformations',
+        'numpy',
+        ],
     zip_safe=True,
     maintainer='jchen777',
     maintainer_email='jasonchen4298@gmail.com',

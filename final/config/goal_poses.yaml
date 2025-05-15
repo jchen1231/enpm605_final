@@ -1,4 +1,4 @@
-cube2_goal:
+cube2_goals:
   2: # ArUco ID
     position: [3.75, -7.75]
     orientation: [0.0, 0.0, 1.57] # RPY
@@ -16,7 +16,7 @@ cube2_goal:
     orientation: [0, 0, 3.14] # RPY  
     circular_direction: 0 # 0 is clockwise, 1 is counter clockwise
 
-final_goal:
+final_goals:
   2: # ArUco ID
     position: [-1.8, 2.1]
     orientation: [1.0, 0.0, 0.0, 0.0] # quaternion

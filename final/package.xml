@@ -2,18 +2,23 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>final</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <version>1.0.0</version>
+  <description>For the Spring 2025 ENPM605 final project</description>
   <maintainer email="jasonchen4298@gmail.com">jchen777</maintainer>
-  <license>TODO: License declaration</license>
+  <license>Driver's license medical license license to kill</license>
 
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
-  <depend>ros2_aruco_interfaces</depend>
-  <depend>custom_interfaces</depend>
   <depend>nav2_simple_commander</depend>
   <depend>nav2_amcl</depend>
   <exec_depend>nav2_bringup</exec_depend>
+  <depend>ros2_aruco_interfaces</depend>
+  <depend>custom_interfaces</depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
